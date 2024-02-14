@@ -5,6 +5,7 @@ from dasbus.server.interface import dbus_interface
 from dasbus.loop import EventLoop
 from dasbus.server.template import InterfaceTemplate
 from dasbus.server.interface import dbus_signal
+from dasbus.server.property import emits_properties_changed
 from dasbus.connection import SessionMessageBus, SystemMessageBus
 from dasbus.signal import Signal
 from dasbus.identifier import DBusServiceIdentifier
@@ -99,6 +100,7 @@ class YggWorkerInterface(InterfaceTemplate):
         Emit "Event" signal over D-Bus
         :return: None
         """
+        print(f"Emitting signal: {signal_name}, {message_id}, {response_to}, {data}")
         self.event_signal.emit(
             signal_name,
             message_id,
@@ -134,6 +136,7 @@ class YggWorkerInterface(InterfaceTemplate):
                 {}
             )
 
+    @emits_properties_changed
     def set_feature(self, name: str, value: str) -> None:
         """
         Try to set feature
@@ -141,8 +144,8 @@ class YggWorkerInterface(InterfaceTemplate):
         :param value: New value of the feature
         :return: None
         """
-        # FIXME: emit D-Bus signal that property has changed
         self.features[name] = value
+        self.report_changed_property("Features")
 
     @property
     def RemoteContent(self) -> Bool:
@@ -157,9 +160,6 @@ class YggWorkerInterface(InterfaceTemplate):
         """
         return self.features
 
-    def event_handler(self, signal_name: int, message_id: str, response_to: str, data: dict) -> None:
-        raise NotImplementedError
-
     def connect_signals(self):
         """Connect the signals."""
         self.event_signal.connect(self.Event)
@@ -167,14 +167,14 @@ class YggWorkerInterface(InterfaceTemplate):
     @dbus_signal
     def Event(self, signal_name: UInt32, message_id: Str, response_to: Str, data: Dict[Str, Str]) -> None:
         """
-        Handler of Event signal
+        Just definition of D-Bus signal. This method is never called.
         :param signal_name:
         :param message_id:
         :param response_to:
         :param data:
         :return: None
         """
-        self.event_handler(signal_name, message_id, response_to, data)
+        pass
 
     def transmit(self, addr: Str, msg_id: Str, response_to: Str, metadata: Dict[Str, Str], data: List[Byte]) -> None:
         """

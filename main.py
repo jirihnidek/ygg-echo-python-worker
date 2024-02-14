@@ -45,18 +45,6 @@ class EchoWorker(YggWorkerInterface):
         now = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
         self.set_feature("DispatchedAt", str(now))
 
-    def event_handler(self, signal_name: int, message_id: str, response_to: str, data: dict) -> None:
-        """
-        Handler of D-Bus signal
-        :param signal_name:
-        :param message_id:
-        :param response_to:
-        :param data:
-        :return:
-        """
-        # FIXME: this is not called for some reason
-        print(f"Signal: {signal_name} {message_id} {response_to} {data}")
-
     def rx_handler(self, addr: str, msg_id: str, response_to: str, metadata: dict, data) -> None:
         """
         Handler of message received over D-Bus from yggdrasil server
