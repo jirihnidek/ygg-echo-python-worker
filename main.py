@@ -3,7 +3,7 @@ import uuid
 import time
 import datetime
 
-from worker import YggWorkerInterface, get_bus, WORKER_EVENT_NAME_WORKING
+from worker import YggWorkerInterface, MESSAGE_BUS, WORKER_EVENT_NAME_WORKING
 
 """
 Example of yggdrasil worker
@@ -124,7 +124,7 @@ def _main():
         echo_worker.connect()
     finally:
         # Unregister the DBus service and objects.
-        get_bus().disconnect()
+        MESSAGE_BUS.disconnect()
 
 
 if __name__ == '__main__':

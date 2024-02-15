@@ -7,6 +7,7 @@ from dasbus.server.template import InterfaceTemplate
 from dasbus.server.interface import dbus_signal
 from dasbus.server.property import emits_properties_changed
 from dasbus.connection import SessionMessageBus, SystemMessageBus
+from dasbus.namespace import get_dbus_name, get_dbus_path
 from dasbus.signal import Signal
 from dasbus.identifier import DBusServiceIdentifier
 from dasbus.xml import XMLGenerator
@@ -59,14 +60,13 @@ class YggWorkerThread(threading.Thread):
         return self._stop_even.is_set()
 
 
-# Define services and objects.
-YGG_WORKER = DBusServiceIdentifier(
-    namespace=("com", "redhat", "Yggdrasil1", "Worker1"),
-    message_bus=get_bus()
-)
+MESSAGE_BUS = get_bus()
+
+YGG_WORKER_NAMESPACE = ("com", "redhat", "Yggdrasil1", "Worker1")
+YGG_WORKER_INTERFACE_NAME = get_dbus_name(*YGG_WORKER_NAMESPACE)
 
 
-@dbus_interface(YGG_WORKER.interface_name)
+@dbus_interface(YGG_WORKER_INTERFACE_NAME)
 class YggWorkerInterface(InterfaceTemplate):
     """The DBus interface for yggdrasil worker."""
 
@@ -86,7 +86,7 @@ class YggWorkerInterface(InterfaceTemplate):
         }
         self.threads: dict[str, YggWorkerThread] = {}
         self.main_loop: Optional[EventLoop] = None
-        self.bus = None
+        self.namespace = None
 
     def print_dbus_xml(self) -> None:
         """
@@ -113,9 +113,9 @@ class YggWorkerInterface(InterfaceTemplate):
         Connect to the yggdrasil server and start the main loop
         :return:
         """
-        self.bus = get_bus()
-        self.bus.publish_object(YGG_WORKER.object_path + "/" + self._NAME, self)
-        self.bus.register_service(YGG_WORKER.service_name + "." + self._NAME)
+        self.namespace = (*YGG_WORKER_NAMESPACE, self._NAME)
+        MESSAGE_BUS.publish_object(get_dbus_path(*self.namespace), self)
+        MESSAGE_BUS.register_service(get_dbus_name(*self.namespace))
 
         self.emit_signal(
             WORKER_EVENT_NAME_STARTED,
@@ -187,7 +187,7 @@ class YggWorkerInterface(InterfaceTemplate):
         :return: None
         """
         print("Transmitting", self, addr, msg_id, response_to, metadata, data)
-        proxy = self.bus.get_proxy(
+        proxy = MESSAGE_BUS.get_proxy(
             service_name="com.redhat.Yggdrasil1.Dispatcher1",
             object_path="/com/redhat/Yggdrasil1/Dispatcher1",
             interface_name="com.redhat.Yggdrasil1.Dispatcher1"
@@ -251,8 +251,8 @@ class YggWorkerInterface(InterfaceTemplate):
             args=[addr, msg_id, response_to, metadata, data]
         )
         thread.daemon = True
-        thread.start()
         self.threads[msg_id] = thread
+        thread.start()
 
     def cancel_handler(self, directive: str, msg_id: str, cancel_id: str) -> None:
         raise NotImplementedError
