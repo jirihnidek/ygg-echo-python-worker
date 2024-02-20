@@ -6,12 +6,14 @@ import datetime
 from worker import YggWorkerInterface, MESSAGE_BUS, WORKER_EVENT_NAME_WORKING
 
 """
-Example of yggdrasil worker
+Example of yggdrasil echo worker
 """
 
 
 class EchoWorker(YggWorkerInterface):
-    """The class implementing yggdrasil echo worker."""
+    """
+    Example of the class implementing yggdrasil echo worker.
+    """
 
     # Name of worker
     _NAME = "echo"
@@ -25,6 +27,12 @@ class EchoWorker(YggWorkerInterface):
             loop_count: int = 1,
             sleep_time: float = 0
     ) -> None:
+        """
+        Initialize the yggdrasil echo worker
+        :param remote_content: whether worker works remotely content mode
+        :param loop_count: Number of echos
+        :param sleep_time: Time to sleep between echos
+        """
         super().__init__(remote_content=remote_content)
         print(f"Created '{self._NAME}' worker: {self}, loop_count: {loop_count}, sleep_time: {sleep_time}")
         self.loop_count = loop_count
@@ -32,13 +40,13 @@ class EchoWorker(YggWorkerInterface):
 
     def send_echo_message(self, addr: str, msg_id: str, response_to: str, metadata: dict, data) -> None:
         """
-        Send a message back to the yggd
-        :param addr:
-        :param msg_id:
-        :param response_to:
-        :param metadata:
-        :param data:
-        :return:
+        Send a message back to the yggdrasil
+        :param addr: Unique string representing worker (self._NAME)
+        :param msg_id: UUID of the message sending to yggdrasil
+        :param response_to: UUID of the message worker is responding to
+        :param metadata: Dictionary with metadata
+        :param data: Raw data
+        :return: None
         """
         self.emit_signal(WORKER_EVENT_NAME_WORKING, msg_id, response_to, {"message": f"echoing {data}"})
         self.transmit(addr, msg_id, response_to, metadata, data)
@@ -48,20 +56,20 @@ class EchoWorker(YggWorkerInterface):
     def rx_handler(self, addr: str, msg_id: str, response_to: str, metadata: dict, data) -> None:
         """
         Handler of message received over D-Bus from yggdrasil server
-        :param addr:
-        :param msg_id:
-        :param response_to:
-        :param metadata:
-        :param data:
-        :return:
+        :param addr: Unique string representing worker (self._NAME)
+        :param msg_id: UUID of the message send to yggdrasil
+        :param response_to: UUID of the message worker is responding to
+        :param metadata: Dictionary with metadata
+        :param data: Raw data
+        :return: None
         """
-        print(f"Dispatch: addr: '{addr}' msg_id: '{msg_id}' response_to: '{response_to}' "
+        print(f"rx_handler: addr: '{addr}' msg_id: '{msg_id}' response_to: '{response_to}' "
               f"metadata: {metadata} data: '{data}'")
         for i in range(self.loop_count):
             if self.threads[msg_id].stopped():
                 print(f"It was requested to stop {msg_id} message. Canceling this job...")
                 break
-            print(f"Sending echo message {i}...")
+            print(f"Sending echo message (loop: {i+1}/{self.loop_count})...")
             self.send_echo_message(
                 addr=addr,
                 msg_id=str(uuid.uuid4()),
@@ -77,24 +85,27 @@ class EchoWorker(YggWorkerInterface):
     def cancel_handler(self, directive: str, msg_id: str, cancel_id: str) -> None:
         """
         Handler of cancel command received over D-Bus from yggdrasil server
-        :param directive:
-        :param msg_id:
-        :param cancel_id:
-        :return:
+        :param directive: Address of the worker
+        :param msg_id: UUID of the message
+        :param cancel_id: UUID of the message that should be canceled
+        :return: None
         """
-        print(f"Canceling message: {directive}, {msg_id}, {cancel_id}")
+        print(f"cancel_handler: {directive}, {msg_id}, {cancel_id}")
         try:
             self.threads[cancel_id].stop()
         except KeyError:
-            print(f"Thread for {cancel_id} does not exists.")
+            print(f"Thread for {cancel_id} does not exist.")
 
 
 def _main():
+    """
+    Main function of the echo worker
+    :return: None
+    """
     parser = argparse.ArgumentParser(description="Example of echo worker")
     parser.add_argument(
         "--remote-content",
-        type=bool,
-        default=False,
+        action="store_true",
         help="Connect as a remote content worker"
     )
     parser.add_argument(
