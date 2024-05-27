@@ -2,12 +2,17 @@ import argparse
 import uuid
 import time
 import datetime
+import logging
 
 from worker import YggWorkerInterface, MESSAGE_BUS, WORKER_EVENT_NAME_WORKING
 
 """
 Example of yggdrasil echo worker
 """
+
+# Initialize logging
+logging.basicConfig(level=logging.DEBUG)
+log = logging.getLogger(__name__)
 
 
 class EchoWorker(YggWorkerInterface):
@@ -34,7 +39,7 @@ class EchoWorker(YggWorkerInterface):
         :param sleep_time: Time to sleep between echos
         """
         super().__init__(remote_content=remote_content)
-        print(f"Created '{self._NAME}' worker: {self}, loop_count: {loop_count}, sleep_time: {sleep_time}")
+        log.debug(f"Created '{self._NAME}' worker: {self}, loop_count: {loop_count}, sleep_time: {sleep_time}")
         self.loop_count = loop_count
         self.sleep_time = sleep_time
 
@@ -53,7 +58,7 @@ class EchoWorker(YggWorkerInterface):
         now = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
         self.set_feature("DispatchedAt", str(now))
 
-    def rx_handler(self, addr: str, msg_id: str, response_to: str, metadata: dict, data) -> None:
+    def dispatch_handler(self, addr: str, msg_id: str, response_to: str, metadata: dict, data) -> None:
         """
         Handler of message received over D-Bus from yggdrasil server
         :param addr: Unique string representing worker (self._NAME)
@@ -63,13 +68,10 @@ class EchoWorker(YggWorkerInterface):
         :param data: Raw data
         :return: None
         """
-        print(f"rx_handler: addr: '{addr}' msg_id: '{msg_id}' response_to: '{response_to}' "
-              f"metadata: {metadata} data: '{data}'")
+        log.debug(f"dispatch_handler: addr: '{addr}' msg_id: '{msg_id}' response_to: '{response_to}' "
+                  f"metadata: {metadata} data: '{data}'")
         for i in range(self.loop_count):
-            if self.threads[msg_id].stopped():
-                print(f"It was requested to stop {msg_id} message. Canceling this job...")
-                break
-            print(f"Sending echo message (loop: {i+1}/{self.loop_count})...")
+            log.debug(f"sending echo message (loop: {i+1}/{self.loop_count})...")
             self.send_echo_message(
                 addr=addr,
                 msg_id=str(uuid.uuid4()),
@@ -78,9 +80,9 @@ class EchoWorker(YggWorkerInterface):
                 data=data
             )
             if self.sleep_time > 0:
-                print(f"Sleeping for {self.sleep_time} seconds...")
+                log.debug(f"sleeping for {self.sleep_time} seconds...")
                 time.sleep(self.sleep_time)
-        print("Dispatch done")
+        log.debug("dispatching done")
 
     def cancel_handler(self, directive: str, msg_id: str, cancel_id: str) -> None:
         """
@@ -90,11 +92,11 @@ class EchoWorker(YggWorkerInterface):
         :param cancel_id: UUID of the message that should be canceled
         :return: None
         """
-        print(f"cancel_handler: {directive}, {msg_id}, {cancel_id}")
+        log.debug(f"cancel_handler: {directive}, {msg_id}, {cancel_id}")
         try:
-            self.threads[cancel_id].stop()
+            self.terminate_job(cancel_id)
         except KeyError:
-            print(f"Thread for {cancel_id} does not exist.")
+            log.debug(f"job for {cancel_id} does not exist.")
 
 
 def _main():
