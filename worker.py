@@ -55,31 +55,7 @@ YGG_WORKER_NAMESPACE = ("com", "redhat", "Yggdrasil1", "Worker1")
 YGG_WORKER_INTERFACE_NAME = get_dbus_name(*YGG_WORKER_NAMESPACE)
 
 
-class YggWorkerJobThread(threading.Thread):
-    """
-    Custom thread for ygg worker
-    """
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self._stop_even = threading.Event()
-
-    def stop(self) -> None:
-        self._stop_even.set()
-
-    def stopped(self) -> bool:
-        return self._stop_even.is_set()
-
-
-class YggWorkerJobProcess(Process):
-    """
-    Custom process for ygg worker
-    """
-    def __init__(self, queue: Queue,*args,**kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self._queue = queue
-
-
-class YggJob:
+class _YggJob:
     """
     Class representing job of yggdrasil worker. This class encapsulates one process
     and one thread. We cannot use only process for job, because dasbus expects that
@@ -101,8 +77,8 @@ class YggJob:
         self._response_to = response_to
         self._metadata = metadata
         self._data = data
-        self.threads: Optional[YggWorkerJobThread] = None
-        self.processes: Optional[Process] = None
+        self.thread: Optional[threading.Thread] = None
+        self.process: Optional[Process] = None
         self.queue: Optional[Queue] = None
 
     def start(self, thread_handler) -> None:
@@ -111,34 +87,42 @@ class YggJob:
         :return: None
         """
         self.queue = Queue()
-        self.threads = YggWorkerJobThread(
+        self.thread = threading.Thread(
             target=thread_handler,
+            name=self._msg_id,
             args=[self._addr, self._msg_id, self._response_to, self._metadata, self._data]
         )
-        self.threads.daemon = True
-        self.threads.start()
+        # self.thread.name = self._msg_id
+        self.thread.daemon = True
+        self.thread.start()
 
     def terminate(self) -> None:
         """
         Try to terminate corresponding process and thread
         :return: None
         """
-        if self.processes is not None:
-            self.processes.terminate()
-        if self.threads is not None:
-            self.threads.stop()
+        if self.process is not None:
+            self.process.terminate()
+
+    def kill(self) -> None:
+        """
+        Try to kill corresponding process and try to stop thread
+        :return: None
+        """
+        if self.process is not None:
+            self.process.kill()
 
 
 @dbus_interface(YGG_WORKER_INTERFACE_NAME)
-class YggWorkerInterface(InterfaceTemplate):
+class YggWorker(InterfaceTemplate):
     """
     Base class and DBus interface for yggdrasil worker.
 
     Usage:
 
-    from worker import YggWorkerInterface, MESSAGE_BUS
+    from worker import YggWorker, MESSAGE_BUS
 
-    class ExampleWorker(YggWorkerInterface):
+    class ExampleWorker(YggWorker):
 
         _NAME = "example"
 
@@ -182,7 +166,7 @@ class YggWorkerInterface(InterfaceTemplate):
             "DispatchedAt": "",
             "Version": self._VERSION
         }
-        self._jobs: dict[str, YggJob] = {}
+        self._jobs: dict[str, _YggJob] = {}
         self.main_loop: Optional[EventLoop] = None
         self.namespace = None
 
@@ -281,7 +265,8 @@ class YggWorkerInterface(InterfaceTemplate):
         """
         pass
 
-    def _transmit(self, addr: str, msg_id: str, response_to: str, metadata: Dict[str, str], data: List[Byte]) -> None:
+    @staticmethod
+    def _transmit(addr: str, msg_id: str, response_to: str, metadata: Dict[str, str], data: List[Byte]) -> None:
         """
         Damn, I do not like Python
         :param addr:
@@ -338,6 +323,20 @@ class YggWorkerInterface(InterfaceTemplate):
         else:
             log.debug(f"Job {msg_id} terminated")
 
+    def kill_job(self, msg_id: str) -> None:
+        """
+        Try to kill job. Kill could not be masked.
+        :param msg_id: ID of job to be killed
+        :return: None
+        """
+        try:
+            log.debug(f"terminating job {msg_id}")
+            self._jobs[msg_id].kill()
+        except KeyError:
+            log.debug(f"Job with message id: {msg_id} does not exist")
+        else:
+            log.debug(f"Job {msg_id} killed")
+
     def dispatch_handler(self, addr: str, msg_id: str, response_to: str, metadata: dict, data) -> None:
         """
         Callback method called, when message is received from the yggdrasil
@@ -366,17 +365,23 @@ class YggWorkerInterface(InterfaceTemplate):
             response_to,
             {}
         )
-        self._jobs[msg_id].processes = Process(
+        self._jobs[msg_id].process = Process(
             target=self.dispatch_handler,
             args=[addr, msg_id, response_to, metadata, data],
             daemon=True
         )
-        self._jobs[msg_id].processes.start()
+        self._jobs[msg_id].process.start()
         # Wait in queue for end of process.
         # Should we define any timeout for the process?
-        while self._jobs[msg_id].processes.is_alive() and self._jobs[msg_id].processes.join(timeout=None):
+        while self._jobs[msg_id].process.is_alive() and self._jobs[msg_id].process.join(timeout=None):
             resp_addr, resp_msg_id, resp_response_to, resp_metadata, resp_data = self._jobs[msg_id].queue.get(block=True)
-            self._transmit(resp_addr, resp_msg_id, resp_response_to, resp_metadata, resp_data)
+            self._transmit(
+                addr=resp_addr,
+                msg_id=resp_msg_id,
+                response_to=resp_response_to,
+                metadata=resp_metadata,
+                data=resp_data
+            )
         del self._jobs[msg_id]
         self.emit_signal(
             WORKER_EVENT_NAME_END,
@@ -387,7 +392,7 @@ class YggWorkerInterface(InterfaceTemplate):
 
     def Dispatch(self, addr: Str, msg_id: Str, response_to: Str, metadata: Dict[Str, Str], data: List[Byte]) -> None:
         """
-        This method is called by yggdrasil service, when a message is received by yggdrasil
+        This D-Bus method is called by yggdrasil service, when a message is received by yggdrasil
         and is dispatched to this worker
         :param addr: Unique string representing worker (self._NAME)
         :param msg_id: UUID representing message
@@ -398,7 +403,9 @@ class YggWorkerInterface(InterfaceTemplate):
         """
 
         log.debug(f"dispatching message {msg_id}")
-        self._jobs[msg_id] = YggJob(addr, msg_id, response_to, metadata, data)
+        self._jobs[msg_id] = _YggJob(addr, msg_id, response_to, metadata, data)
+        # Start process and thread here and do not wait for thread or process to join,
+        # because it would block dispatching of other messages
         self._jobs[msg_id].start(thread_handler=self._dispatch_handler)
 
     def cancel_handler(self, directive: str, msg_id: str, cancel_id: str) -> None:
@@ -413,7 +420,7 @@ class YggWorkerInterface(InterfaceTemplate):
 
     def Cancel(self, directive: Str, msg_id: Str, cancel_id: Str) -> None:
         """
-        This method is called when a cancel command is received from yggdrasil server
+        This D-Bus method is called by yggdrasil service, when a cancel command is received by yggdrasil
         for message with given cancel_id
         :param directive: Unique string representing worker (self._NAME)
         :param msg_id: UUID of the message

@@ -4,7 +4,7 @@ import time
 import datetime
 import logging
 
-from worker import YggWorkerInterface, MESSAGE_BUS, WORKER_EVENT_NAME_WORKING
+from worker import YggWorker, MESSAGE_BUS, WORKER_EVENT_NAME_WORKING
 
 """
 Example of yggdrasil echo worker
@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger(__name__)
 
 
-class EchoWorker(YggWorkerInterface):
+class EchoWorker(YggWorker):
     """
     Example of the class implementing yggdrasil echo worker.
     """
@@ -60,7 +60,7 @@ class EchoWorker(YggWorkerInterface):
 
     def dispatch_handler(self, addr: str, msg_id: str, response_to: str, metadata: dict, data) -> None:
         """
-        Handler of message received over D-Bus from yggdrasil server
+        Handler of message received over D-Bus from yggdrasil
         :param addr: Unique string representing worker (self._NAME)
         :param msg_id: UUID of the message send to yggdrasil
         :param response_to: UUID of the message worker is responding to
@@ -86,7 +86,7 @@ class EchoWorker(YggWorkerInterface):
 
     def cancel_handler(self, directive: str, msg_id: str, cancel_id: str) -> None:
         """
-        Handler of cancel command received over D-Bus from yggdrasil server
+        Handler of cancel command received over D-Bus from yggdrasil
         :param directive: Address of the worker
         :param msg_id: UUID of the message
         :param cancel_id: UUID of the message that should be canceled

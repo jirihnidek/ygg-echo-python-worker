@@ -6,10 +6,10 @@ Requirements:
 
 * https://github.com/rhinstaller/dasbus
 
-To run yggdrasil echo worker run following code
+To run example of yggdrasil echo worker run following code
 
 ```
-python ./main.py
+python ./example.py
 ```
 
 It is possible to trigger job (or more) using:
