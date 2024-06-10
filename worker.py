@@ -12,6 +12,7 @@ from dasbus.signal import Signal
 from dasbus.xml import XMLGenerator
 import threading
 import logging
+import enum
 from multiprocessing import Process, Queue
 import gi
 
@@ -21,15 +22,18 @@ This module contain base class for implementation yggdrasil worker in pure Pytho
 
 gi.require_version("GLib", "2.0")
 
-# Constants of events
-WORKER_EVENT_NAME_BEGIN = 1
-WORKER_EVENT_NAME_END = 2
-WORKER_EVENT_NAME_WORKING = 3
-WORKER_EVENT_NAME_STARTED = 4
-WORKER_EVENT_NAME_STOPPED = 5
-
-
 log = logging.getLogger(__name__)
+
+
+class WorkerEvent(enum.IntEnum):
+    """
+    Enum class containing worker events.
+    """
+    BEGIN = 1
+    END = 2
+    WORKING = 3
+    STARTED = 4
+    STOPPED = 5
 
 
 def _get_bus():
@@ -200,7 +204,7 @@ class YggWorker(InterfaceTemplate):
         MESSAGE_BUS.register_service(get_dbus_name(*self.namespace))
 
         self.emit_signal(
-            WORKER_EVENT_NAME_STARTED,
+            WorkerEvent.STARTED,
             "",
             "",
             {}
@@ -212,7 +216,7 @@ class YggWorker(InterfaceTemplate):
             self.main_loop.run()
         finally:
             self.emit_signal(
-                WORKER_EVENT_NAME_STOPPED,
+                WorkerEvent.STOPPED,
                 "",
                 "",
                 {}
@@ -360,7 +364,7 @@ class YggWorker(InterfaceTemplate):
         :return: None
         """
         self.emit_signal(
-            WORKER_EVENT_NAME_BEGIN,
+            WorkerEvent.BEGIN,
             msg_id,
             response_to,
             {}
@@ -384,7 +388,7 @@ class YggWorker(InterfaceTemplate):
             )
         del self._jobs[msg_id]
         self.emit_signal(
-            WORKER_EVENT_NAME_END,
+            WorkerEvent.END,
             msg_id,
             response_to,
             {}

@@ -4,7 +4,7 @@ import time
 import datetime
 import logging
 
-from worker import YggWorker, MESSAGE_BUS, WORKER_EVENT_NAME_WORKING
+from worker import YggWorker, MESSAGE_BUS, WorkerEvent
 
 """
 Example of yggdrasil echo worker
@@ -53,7 +53,7 @@ class EchoWorker(YggWorker):
         :param data: Raw data
         :return: None
         """
-        self.emit_signal(WORKER_EVENT_NAME_WORKING, msg_id, response_to, {"message": f"echoing {data}"})
+        self.emit_signal(WorkerEvent.WORKING, msg_id, response_to, {"message": f"echoing {data}"})
         self.transmit(addr, msg_id, response_to, metadata, data)
         now = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
         self.set_feature("DispatchedAt", str(now))
